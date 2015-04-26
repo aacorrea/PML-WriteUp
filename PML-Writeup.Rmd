@@ -1,0 +1,163 @@
+---
+title: "PML Course Project"
+author: "Alejandro Correa"
+date: "Sunday, April 26, 2015"
+output: html_document
+---
+
+##**How you built your model?**
+**1.  Problem and Data understanding:**  Read the paper: Velloso, E.; Bulling, A.;Gellersen, H.; Ugulino, W.; Fuks, H. *Qualitative Activity Recognition of Weight Lifting Exercises*. Proceedings of 4th International Conference in Cooperation withSIGCHI (Augmented Human '13) . Stuttgart, Germany: ACM SIGCHI, 2013.
+
+**2.  Data preparation:** 
+The analytic technologies that we can bring to bear are powerful but they impose certain requirements on the data they use. They often require data to be in a form different from how the data are provided naturally, and some conversion will be necessary. Explore the data. In our case, we must get rid of blank cells and weird text like "#DIV/0!". Eliminate no relevant variables (names, time, etc...) , columns with zero variance or many NA's, (e.x.: more than 19,000 NA's). Optionally, depending of the method you are going to use you should normalize or scale the data.
+
+```{r, echo=FALSE}
+library(caret);library(rattle)
+set.seed(18283)
+chars=c("NA","Na","na","NAN","Nan","nan","","#DIV/0!")
+training = read.table("D:/pml-training.csv",sep=",", header=T, na.strings=chars)
+testing = read.table("D:/pml-testing.csv",sep=",", header=T, na.strings=chars)
+```
+
+Original data dimensions:
+```{r, echo=FALSE}
+dim(training)
+```
+
+
+```{r, echo=FALSE}
+trash.vars <- nearZeroVar(training, saveMetrics=TRUE)
+training=training[,(trash.vars$nzv==FALSE)]
+find.trash = function(x){
+    m=dim(x)[1]
+    p=dim(x)[2]
+    trash=numeric()
+    for (i in 1:p){
+       if (sum(is.na(x[,i]))>19000){trash=cbind(trash,i)}
+    
+    }
+    return(trash)
+}
+
+trash=find.trash(training)
+training=training[,-trash]
+training=training[,-c(1:5)]
+final.colnames = colnames(training[,-54])
+```
+
+
+After cleaning data dimensions:
+```{r, echo=FALSE}
+dim(training)
+```
+
+**3.  Modelling:** 
+The modeling stage is the primary place where data mining techniques are applied to the data. It is important to have some understanding of the fundamental ideas of data mining, including the sorts of techniques and algorithms that exist, because this is the part of the craft where the most science and technology can be brought to bear. Since, we are dealing with a multiclassification problem, I decided to use tree models, this models were also implemented by the authors in the original research. First I built with the "CARET" and "RATTLE" packages help a single tree model with the "rpart method". We obtain a low Accuracy on the Test data but a very nice tree easy to explain if necessary. The three most important variables were: *pitch_forearm*, *roll_forearm* and *magnet_dumbbell_y*. Given the low accuracy, I use the random forest method, which is more complex but more precise. The Accuracy improve a lot, on the other hand it was computationally very slow, cause the bootstraping (8 hrs in a 2Gb RAM laptop  for 70% of the raw data obs and 54 predictors). A good idea to reduce computing time could be apply PCA to the data and then use the random forest algorithm. 
+
+###Single Tree model statistics:
+
+```{r}
+inTrain = createDataPartition(y=training$classe,p=0.7, list=FALSE)
+data.Train = training[inTrain,]
+data.Test = training[-inTrain,]
+modFit.rpart = train(classe ~ ., method="rpart", data=data.Train)
+```
+
+```{r}
+print(modFit.rpart$finalModel)
+```
+
+
+```{r, echo=FALSE}
+fancyRpartPlot(modFit.rpart$finalModel)
+```
+
+
+We use the Test data to measure our single tree model performance:
+```{r}
+pred.Test = predict(modFit.rpart,newdata=data.Test)
+confusionMatrix(pred.Test,data.Test$classe)
+```
+
+###Random Forest model statistics: 
+
+Due the hard computing time I will omit the code processing in the making of this document for this model:
+
+```{r, eval=FALSE}
+set.seed(18283)
+modFit.rf = train(classe ~ ., method="rf", data=data.Train)
+```
+
+```
+##  Random Forest 
+
+##  13737 samples
+##  53 predictor
+##  5 classes: 'A', 'B', 'C', 'D', 'E' 
+
+##  No pre-processing
+##  Resampling: Bootstrapped (25 reps) 
+
+##  Summary of sample sizes: 13737, 13737, 13737, 13737, 13737, 13737, ... 
+
+##  Resampling results across tuning parameters:
+    
+##    mtry  Accuracy   Kappa      Accuracy SD  Kappa SD   
+##     2    0.9915538  0.9893167  0.001892914  0.002392660
+##    27    0.9953497  0.9941182  0.001157793  0.001464180
+##    53    0.9915516  0.9893150  0.003183247  0.004023367
+
+##  Accuracy was used to select the optimal model using  the largest value.
+##  The final value used for the model was mtry = 27. 
+
+```
+
+```{r, eval=FALSE}
+pred.Test = predict(modFit.rf,data.Test)
+confusionMatrix(pred.Test,data.Test$classe)
+```
+
+```
+##  Confusion Matrix and Statistics
+
+##  Reference
+##  Prediction    A    B    C    D    E
+##           A 1674    4    0    0    0
+##           B    0 1134    4    0    0
+##           C    0    0 1022    3    0
+##           D    0    1    0  960    0
+##           E    0    0    0    1 1082
+
+##  Overall Statistics
+
+##  Accuracy : 0.9978          
+##  95% CI : (0.9962, 0.9988)
+##  No Information Rate : 0.2845          
+##  P-Value [Acc > NIR] : < 2.2e-16       
+
+##  Kappa : 0.9972          
+##  Mcnemar's Test P-Value : NA              
+
+##  Statistics by Class:
+
+##                       Class: A Class: B Class: C Class: D Class: E
+##  Sensitivity            1.0000   0.9956   0.9961   0.9959   1.0000
+##  Specificity            0.9991   0.9992   0.9994   0.9998   0.9998
+##  Pos Pred Value         0.9976   0.9965   0.9971   0.9990   0.9991
+##  Neg Pred Value         1.0000   0.9989   0.9992   0.9992   1.0000
+##  Prevalence             0.2845   0.1935   0.1743   0.1638   0.1839
+##  Detection Rate         0.2845   0.1927   0.1737   0.1631   0.1839
+##  Detection Prevalence   0.2851   0.1934   0.1742   0.1633   0.1840
+##  Balanced Accuracy      0.9995   0.9974   0.9977   0.9978   0.9999
+```
+
+##**How you used cross validation?**
+I used a Set Validation Approach on the data with the help of the "CARET" package, 70% Training and 30% Test. The accuracy in the test data, give us the real performance of the model. This was applied both for the single tree model and the random forest. 
+
+##**What you think the expected out of sample error is?**
+The misclassification rate in the Test data give us a more precise idea of our model. Random Forest out sample error: 1 - 0.9978 = 0.0022 
+
+##**Why you made the choices you did?**
+**Cross-validation:** this will give us a more precise idea of the real performance of our models. Given the flexibility of the implemented models, this implied low bias but high variance, so to reduce the variance problem is important to work with a large sample data. A training data of 70% of the obs works well for this purpose.
+**Model selection:** the random forest model use bagging on decorrelating trees helping also with the variance problem.
+
